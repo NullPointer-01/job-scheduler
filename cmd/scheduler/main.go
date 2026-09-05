@@ -12,11 +12,13 @@ import (
 
 	"distributed-job-scheduler/internal/config"
 	"distributed-job-scheduler/internal/handler"
+	"distributed-job-scheduler/internal/scheduler"
 	"distributed-job-scheduler/internal/store"
 
 	migrate "github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/pgx/v5"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
@@ -60,6 +62,12 @@ func main() {
 
 	db := sqlx.NewDb(stdlib.OpenDBFromPool(pool), "pgx")
 	st := store.NewPostgresStore(db)
+
+	// Scheduler
+	queue := make(chan uuid.UUID, conf.WorkerCount*2)
+	sch := scheduler.New(st, queue, conf.SchDispatchCount, conf.SchTickInterval)
+
+	go sch.Run(ctx)
 
 	// Http Server
 	slog.Info("Starting server on ", "addr", conf.ServerAddr, "port", conf.ServerPort)

@@ -37,6 +37,19 @@ func (s *PostgresStore) CreateJob(ctx context.Context, job Job) (Job, error) {
 	return createdJob, nil
 }
 
+func (s *PostgresStore) GetJobs(ctx context.Context, batch int) ([]Job, error) {
+	const q = "SELECT * FROM jobs LIMIT $1"
+
+	var jobs []Job
+	err := s.db.SelectContext(ctx, &jobs, q, batch)
+
+	if err != nil {
+		return []Job{}, err
+	}
+
+	return jobs, nil
+}
+
 func (s *PostgresStore) GetJob(ctx context.Context, id uuid.UUID) (Job, error) {
 	const q = "SELECT * FROM jobs WHERE id = $1"
 

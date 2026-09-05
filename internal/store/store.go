@@ -18,6 +18,8 @@ var (
 type Store interface {
 	CreateJob(ctx context.Context, job Job) (Job, error)
 
+	GetJobs(ctx context.Context, batch int) ([]Job, error)
+
 	GetJob(ctx context.Context, id uuid.UUID) (Job, error)
 
 	CancelJob(ctx context.Context, id uuid.UUID) error

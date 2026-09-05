@@ -1,11 +1,20 @@
 package config
 
-import "github.com/kelseyhightower/envconfig"
+import (
+	"time"
+
+	"github.com/kelseyhightower/envconfig"
+)
 
 type Config struct {
 	ServerAddr  string `envconfig:"SERVER_ADDR" default:"localhost"`
 	ServerPort  string `envconfig:"SERVER_PORT" default:"20000"`
 	DatabaseURL string `envconfig:"DATABASE_URL" default:"postgresql://postgres@localhost:5432/mydb"`
+
+	SchTickInterval  time.Duration `envconfig:"SCHEDULER_TICK_INTERVAL" default:"3s"`
+	SchDispatchCount int           `envconfig:"SCHEDULER_DISPATCH_COUNT" default:"100"`
+
+	WorkerCount int `envconfig:"WORKER_COUNT" default:"6"`
 }
 
 func Load() (Config, error) {
