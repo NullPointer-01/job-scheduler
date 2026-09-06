@@ -10,6 +10,8 @@ import (
 	"github.com/google/uuid"
 )
 
+const defaultTimeoutMillis = 3000
+
 type Handler struct {
 	st store.Store
 }
@@ -54,14 +56,20 @@ func (h *Handler) submitJob(w http.ResponseWriter, r *http.Request) {
 		runAt = &now
 	}
 
+	timeoutMillis := req.TimeoutMillis
+	if req.TimeoutMillis == 0 {
+		timeoutMillis = defaultTimeoutMillis
+	}
+
 	job := store.Job{
-		Id:         uuid.New(),
-		Type:       *req.Type,
-		Data:       data,
-		Status:     store.StateScheduled,
-		RunAt:      *runAt,
-		CreatedAt:  now,
-		ModifiedAt: now,
+		Id:            uuid.New(),
+		Type:          *req.Type,
+		Data:          data,
+		Status:        store.StateScheduled,
+		RunAt:         *runAt,
+		TimeoutMillis: timeoutMillis,
+		CreatedAt:     now,
+		ModifiedAt:    now,
 	}
 
 	createdJob, err := h.st.CreateJob(r.Context(), job)

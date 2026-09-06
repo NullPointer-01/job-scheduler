@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -78,13 +79,24 @@ func (p *Pool) executeJob(ctx context.Context, jobId uuid.UUID) {
 		slog.Error("No handler registered for type" + job.Type)
 		return
 	}
-	handler(ctx, job.Data)
+
+	execCtx, cancel := context.WithTimeout(ctx, time.Duration(job.TimeoutMillis)*time.Millisecond)
+	defer cancel()
+
+	handler(execCtx, job.Data)
 	p.store.MarkJobSucceeded(ctx, jobId)
 }
 
 func (p *Pool) initHandlers() {
 	p.handlers["email"] = func(ctx context.Context, data json.RawMessage) error {
 		slog.Info("Executing email job: ", "data", string(data))
-		return nil
+		select {
+		case <-ctx.Done():
+			slog.Info("Job timed out")
+			return nil
+		default:
+			slog.Info("Email successfully sent")
+			return nil
+		}
 	}
 }

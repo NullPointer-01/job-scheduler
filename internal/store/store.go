@@ -41,11 +41,12 @@ const (
 )
 
 type Job struct {
-	Id         uuid.UUID       `db:"id"`
-	Type       string          `db:"type"`
-	Data       json.RawMessage `db:"data"`
-	Status     JobState        `db:"status"`
-	RunAt      time.Time       `db:"run_at"`
-	CreatedAt  time.Time       `db:"created_at"`
-	ModifiedAt time.Time       `db:"modified_at"`
+	Id            uuid.UUID       `db:"id"`
+	Type          string          `db:"type"`
+	Data          json.RawMessage `db:"data"`
+	Status        JobState        `db:"status"`
+	RunAt         time.Time       `db:"run_at"`
+	TimeoutMillis int             `db:"timeout_millis"`
+	CreatedAt     time.Time       `db:"created_at"`
+	ModifiedAt    time.Time       `db:"modified_at"`
 }

@@ -21,14 +21,14 @@ func NewPostgresStore(db *sqlx.DB) *PostgresStore {
 
 func (s *PostgresStore) CreateJob(ctx context.Context, job Job) (Job, error) {
 	const q = `
-		INSERT INTO jobs (id, type, data, status, run_at, created_at, modified_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO jobs (id, type, data, status, run_at, timeout_millis, created_at, modified_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING *`
 
 	var createdJob Job
 
 	err := s.db.GetContext(ctx, &createdJob, q,
-		job.Id, job.Type, job.Data, job.Status, job.RunAt, job.CreatedAt, job.ModifiedAt)
+		job.Id, job.Type, job.Data, job.Status, job.RunAt, job.TimeoutMillis, job.CreatedAt, job.ModifiedAt)
 
 	if err != nil {
 		return Job{}, err

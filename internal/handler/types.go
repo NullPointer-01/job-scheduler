@@ -6,7 +6,8 @@ import (
 )
 
 type SubmitJobRequest struct {
-	Type  *string         `json:"type"`
-	Data  json.RawMessage `json:"data"`
-	RunAt *time.Time      `json:"run_at"`
+	Type          *string         `json:"type"`
+	Data          json.RawMessage `json:"data"`
+	RunAt         *time.Time      `json:"run_at"`
+	TimeoutMillis int             `json:"timeout_millis"`
 }
