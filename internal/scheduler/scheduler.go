@@ -40,7 +40,7 @@ func (sch *Scheduler) Run(ctx context.Context) {
 }
 
 func (sch *Scheduler) tick(ctx context.Context) {
-	jobs, err := sch.store.GetJobs(ctx, sch.batch)
+	jobs, err := sch.store.GetPendingJobs(ctx, sch.batch)
 	if err != nil {
 		slog.Error("Scheduler tick failed: ", "err", err)
 		return

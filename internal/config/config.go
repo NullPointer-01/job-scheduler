@@ -14,7 +14,7 @@ type Config struct {
 	SchTickInterval  time.Duration `envconfig:"SCHEDULER_TICK_INTERVAL" default:"3s"`
 	SchDispatchCount int           `envconfig:"SCHEDULER_DISPATCH_COUNT" default:"100"`
 
-	WorkerCount int `envconfig:"WORKER_COUNT" default:"6"`
+	WkrPoolSize int `envconfig:"WORKER_POOL_SIZE" default:"6"`
 }
 
 func Load() (Config, error) {

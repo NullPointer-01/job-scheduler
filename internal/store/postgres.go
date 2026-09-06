@@ -37,11 +37,11 @@ func (s *PostgresStore) CreateJob(ctx context.Context, job Job) (Job, error) {
 	return createdJob, nil
 }
 
-func (s *PostgresStore) GetJobs(ctx context.Context, batch int) ([]Job, error) {
-	const q = "SELECT * FROM jobs LIMIT $1"
+func (s *PostgresStore) GetPendingJobs(ctx context.Context, limit int) ([]Job, error) {
+	const q = "SELECT * FROM jobs WHERE status = $1 LIMIT $2"
 
 	var jobs []Job
-	err := s.db.SelectContext(ctx, &jobs, q, batch)
+	err := s.db.SelectContext(ctx, &jobs, q, StateScheduled, limit)
 
 	if err != nil {
 		return []Job{}, err
@@ -91,5 +91,63 @@ func (s *PostgresStore) CancelJob(ctx context.Context, id uuid.UUID) error {
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrUnknown
 	}
+	return nil
+}
+
+func (s *PostgresStore) MarkJobSucceeded(ctx context.Context, id uuid.UUID) error {
+	q := "SELECT * FROM jobs WHERE id = $1"
+
+	var job Job
+	err := s.db.GetContext(ctx, &job, q, id)
+
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+
+	if err != nil {
+		return fmt.Errorf("failed to fetch job: %w", err)
+	}
+
+	q = "UPDATE jobs SET status = $1, modified_at = $2 WHERE id = $3"
+	now := time.Now().Truncate(time.Second)
+
+	res, err := s.db.ExecContext(ctx, q, StateSuccess, now, id)
+	if err != nil {
+		return fmt.Errorf("failed to mark job as success: %w", err)
+	}
+
+	if n, _ := res.RowsAffected(); n > 0 {
+		return ErrUnknown
+	}
+
+	return nil
+}
+
+func (s *PostgresStore) MarkJobFailed(ctx context.Context, id uuid.UUID) error {
+	q := "SELECT * FROM jobs WHERE id = $1"
+
+	var job Job
+	err := s.db.GetContext(ctx, &job, q, id)
+
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+
+	if err != nil {
+		return fmt.Errorf("failed to fetch job: %w", err)
+	}
+
+	q = "UPDATE jobs SET status = $1, modified_at = $2 WHERE id = $3"
+	now := time.Now().Truncate(time.Second)
+
+	res, err := s.db.ExecContext(ctx, q, StateFailed, now, id)
+	if err != nil {
+		return fmt.Errorf("failed to mark job as success: %w", err)
+	}
+
+	if n, _ := res.RowsAffected(); n > 0 {
+		return ErrUnknown
+	}
+
 	return nil
 }
