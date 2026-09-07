@@ -64,6 +64,16 @@ func main() {
 	db := sqlx.NewDb(stdlib.OpenDBFromPool(pool), "pgx")
 	st := store.NewPostgresStore(db)
 
+	// Recover crashed jobs
+	recovered, err := st.RecoverCrashedJobs(ctx)
+	if err != nil {
+		slog.Error("Error whiel recovering crashed jobs: , ", "err", err)
+	}
+
+	if recovered > 0 {
+		slog.Info("Recovered jobs", "count", recovered)
+	}
+
 	// Scheduler and Worker pool
 	queue := make(chan uuid.UUID, conf.WkrPoolSize*2)
 	sch := scheduler.New(st, queue, conf.SchDispatchCount, conf.SchTickInterval)

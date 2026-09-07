@@ -27,6 +27,8 @@ type Store interface {
 	MarkJobSucceeded(ctx context.Context, id uuid.UUID) error
 
 	MarkJobFailed(ctx context.Context, id uuid.UUID) error
+
+	RecoverCrashedJobs(ctx context.Context) (int, error)
 }
 
 type JobState string

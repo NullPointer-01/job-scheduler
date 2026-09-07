@@ -62,8 +62,9 @@ func (s *PostgresStore) GetPendingJobs(ctx context.Context, limit int) ([]Job, e
 	}
 
 	q2, args, err := sqlx.In(
-		"UPDATE jobs SET status = ? WHERE id in (?)",
+		"UPDATE jobs SET status = ?, modified_at = ? WHERE id IN (?)",
 		StateRunning,
+		time.Now().Truncate(time.Second),
 		jobIds,
 	)
 	q2 = tx.Rebind(q2)
@@ -184,4 +185,18 @@ func (s *PostgresStore) MarkJobFailed(ctx context.Context, id uuid.UUID) error {
 	}
 
 	return nil
+}
+
+func (s *PostgresStore) RecoverCrashedJobs(ctx context.Context) (int, error) {
+	// Jobs that are past twice their timeout are considered crashed
+	const q = "UPDATE jobs SET status = $1, modified_at = $2 WHERE status = $3 AND modified_at + (2 * timeout_millis * interval '1 millisecond') < $4"
+	now := time.Now().Truncate(time.Second)
+
+	res, err := s.db.ExecContext(ctx, q, StateScheduled, now, StateRunning, now)
+	if err != nil {
+		return 0, err
+	}
+
+	n, _ := res.RowsAffected()
+	return int(n), nil
 }
