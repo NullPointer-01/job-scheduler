@@ -33,7 +33,6 @@ type JobState string
 
 const (
 	StateScheduled JobState = "scheduled"
-	StateReady     JobState = "ready"
 	StateRunning   JobState = "running"
 	StateCancelled JobState = "cancelled"
 	StateSuccess   JobState = "success"

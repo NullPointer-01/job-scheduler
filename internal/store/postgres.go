@@ -38,15 +38,49 @@ func (s *PostgresStore) CreateJob(ctx context.Context, job Job) (Job, error) {
 }
 
 func (s *PostgresStore) GetPendingJobs(ctx context.Context, limit int) ([]Job, error) {
-	const q = "SELECT * FROM jobs WHERE status = $1 LIMIT $2"
-
+	const q1 = "SELECT * FROM jobs WHERE status = $1 ORDER BY run_at LIMIT $2 FOR UPDATE SKIP LOCKED"
 	var jobs []Job
-	err := s.db.SelectContext(ctx, &jobs, q, StateScheduled, limit)
 
+	tx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return []Job{}, err
+	}
+	defer tx.Rollback()
+
+	err = tx.SelectContext(ctx, &jobs, q1, StateScheduled, limit)
 	if err != nil {
 		return []Job{}, err
 	}
 
+	if len(jobs) == 0 {
+		return []Job{}, tx.Commit()
+	}
+
+	jobIds := make([]uuid.UUID, 0, len(jobs))
+	for _, job := range jobs {
+		jobIds = append(jobIds, job.Id)
+	}
+
+	q2, args, err := sqlx.In(
+		"UPDATE jobs SET status = ? WHERE id in (?)",
+		StateRunning,
+		jobIds,
+	)
+	q2 = tx.Rebind(q2)
+
+	_, err = tx.ExecContext(ctx, q2, args...)
+	if err != nil {
+		return []Job{}, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return []Job{}, err
+	}
+
+	// Update jobs status
+	for i := range jobs {
+		jobs[i].Status = StateRunning
+	}
 	return jobs, nil
 }
 
