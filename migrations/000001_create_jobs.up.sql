@@ -6,6 +6,8 @@ CREATE TABLE Jobs (
     data JSONB NOT NULL,
     status TEXT NOT NULL,
     run_at TIMESTAMPTZ NOT NULL,
+    retry_count INT NULL,
+    max_retries INT NULL,
     timeout_millis INT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL,
     modified_at TIMESTAMPTZ NOT NULL

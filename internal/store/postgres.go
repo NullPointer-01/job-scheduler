@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,16 +20,21 @@ func NewPostgresStore(db *sqlx.DB) *PostgresStore {
 	return &PostgresStore{db: db}
 }
 
+const (
+	backoffBaseTime = 5 * time.Second
+	backoffMaxTime  = 30 * time.Minute
+)
+
 func (s *PostgresStore) CreateJob(ctx context.Context, job Job) (Job, error) {
 	const q = `
-		INSERT INTO jobs (id, type, data, status, run_at, timeout_millis, created_at, modified_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		INSERT INTO jobs (id, type, data, status, run_at, retry_count, max_retries, timeout_millis, created_at, modified_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		RETURNING *`
 
 	var createdJob Job
 
 	err := s.db.GetContext(ctx, &createdJob, q,
-		job.Id, job.Type, job.Data, job.Status, job.RunAt, job.TimeoutMillis, job.CreatedAt, job.ModifiedAt)
+		job.Id, job.Type, job.Data, job.Status, job.RunAt, job.RetryCount, job.MaxRetries, job.TimeoutMillis, job.CreatedAt, job.ModifiedAt)
 
 	if err != nil {
 		return Job{}, err
@@ -158,33 +164,45 @@ func (s *PostgresStore) MarkJobSucceeded(ctx context.Context, id uuid.UUID) erro
 	return nil
 }
 
-func (s *PostgresStore) MarkJobFailed(ctx context.Context, id uuid.UUID) error {
+func (s *PostgresStore) MarkJobFailed(ctx context.Context, id uuid.UUID) (bool, error) {
 	q := "SELECT * FROM jobs WHERE id = $1"
 
 	var job Job
 	err := s.db.GetContext(ctx, &job, q, id)
 
 	if errors.Is(err, sql.ErrNoRows) {
-		return ErrNotFound
+		return false, ErrNotFound
 	}
 
 	if err != nil {
-		return fmt.Errorf("failed to fetch job: %w", err)
+		return false, fmt.Errorf("failed to fetch job: %w", err)
 	}
 
-	q = "UPDATE jobs SET status = $1, modified_at = $2 WHERE id = $3"
 	now := time.Now().Truncate(time.Second)
+	cannotRetry := job.MaxRetries == 0 || job.RetryCount >= job.MaxRetries
 
-	res, err := s.db.ExecContext(ctx, q, StateFailed, now, id)
+	if cannotRetry {
+		q = "UPDATE jobs SET status = $1, modified_at = $2 WHERE id = $3"
+		_, err := s.db.ExecContext(ctx, q, StateFailed, now, id)
+
+		if err != nil {
+			return false, fmt.Errorf("Exception while marking job as failed: %w", err)
+		}
+
+		return false, nil
+	}
+
+	q = `UPDATE jobs
+		SET status = $1, modified_at = $2,
+		run_at = $3, retry_count = retry_count + 1
+		WHERE id = $4`
+	_, err = s.db.ExecContext(ctx, q, StateScheduled, now, calculateNextRunTime(job.RetryCount, now), id)
+
 	if err != nil {
-		return fmt.Errorf("failed to mark job as success: %w", err)
+		return true, fmt.Errorf("Exception while marking job as failed: %w", err)
 	}
 
-	if n, _ := res.RowsAffected(); n > 0 {
-		return ErrUnknown
-	}
-
-	return nil
+	return true, nil
 }
 
 func (s *PostgresStore) RecoverCrashedJobs(ctx context.Context) (int, error) {
@@ -199,4 +217,11 @@ func (s *PostgresStore) RecoverCrashedJobs(ctx context.Context) (int, error) {
 
 	n, _ := res.RowsAffected()
 	return int(n), nil
+}
+
+func calculateNextRunTime(retryCount int, now time.Time) time.Time {
+	nextTime := backoffBaseTime * time.Duration(math.Pow(2, float64(retryCount-1)))
+	nextTime = max(nextTime, backoffMaxTime)
+
+	return now.Add(nextTime)
 }

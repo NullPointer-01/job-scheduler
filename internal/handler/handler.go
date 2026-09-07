@@ -61,12 +61,19 @@ func (h *Handler) submitJob(w http.ResponseWriter, r *http.Request) {
 		timeoutMillis = defaultTimeoutMillis
 	}
 
+	maxRetries := 0
+	if req.MaxRetries > 0 {
+		maxRetries = req.MaxRetries
+	}
+
 	job := store.Job{
 		Id:            uuid.New(),
 		Type:          *req.Type,
 		Data:          data,
 		Status:        store.StateScheduled,
 		RunAt:         *runAt,
+		RetryCount:    0,
+		MaxRetries:    maxRetries,
 		TimeoutMillis: timeoutMillis,
 		CreatedAt:     now,
 		ModifiedAt:    now,

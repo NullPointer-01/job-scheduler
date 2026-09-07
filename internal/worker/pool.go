@@ -76,6 +76,7 @@ func (p *Pool) executeJob(ctx context.Context, jobId uuid.UUID) {
 
 	handler, ok := p.handlers[job.Type]
 	if !ok {
+		p.store.MarkJobFailed(ctx, jobId)
 		slog.Error("No handler registered for type" + job.Type)
 		return
 	}
@@ -83,7 +84,13 @@ func (p *Pool) executeJob(ctx context.Context, jobId uuid.UUID) {
 	execCtx, cancel := context.WithTimeout(ctx, time.Duration(job.TimeoutMillis)*time.Millisecond)
 	defer cancel()
 
-	handler(execCtx, job.Data)
+	err = handler(execCtx, job.Data)
+	if err != nil {
+		slog.Error("Job execution failed", "err", err)
+		p.store.MarkJobFailed(ctx, jobId)
+		return
+	}
+
 	p.store.MarkJobSucceeded(ctx, jobId)
 }
 

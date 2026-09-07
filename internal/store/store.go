@@ -26,7 +26,7 @@ type Store interface {
 
 	MarkJobSucceeded(ctx context.Context, id uuid.UUID) error
 
-	MarkJobFailed(ctx context.Context, id uuid.UUID) error
+	MarkJobFailed(ctx context.Context, id uuid.UUID) (bool, error)
 
 	RecoverCrashedJobs(ctx context.Context) (int, error)
 }
@@ -47,6 +47,8 @@ type Job struct {
 	Data          json.RawMessage `db:"data"`
 	Status        JobState        `db:"status"`
 	RunAt         time.Time       `db:"run_at"`
+	RetryCount    int             `db:"retry_count"`
+	MaxRetries    int             `db:"max_retries"`
 	TimeoutMillis int             `db:"timeout_millis"`
 	CreatedAt     time.Time       `db:"created_at"`
 	ModifiedAt    time.Time       `db:"modified_at"`
