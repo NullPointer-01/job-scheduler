@@ -7,8 +7,11 @@ import (
 )
 
 type Config struct {
-	ServerAddr  string `envconfig:"SERVER_ADDR" default:"localhost"`
-	ServerPort  string `envconfig:"SERVER_PORT" default:"20000"`
+	ServerAddr string `envconfig:"SERVER_ADDR" default:"localhost"`
+	ServerPort string `envconfig:"SERVER_PORT" default:"20000"`
+
+	MetricsAddr string `envconfig:"METRICS_ADDR"  default:"localhost"`
+	MetricsPort string `envconfig:"METRICS_PORT" default:"30000"`
 	DatabaseURL string `envconfig:"DATABASE_URL" default:"postgresql://postgres@localhost:5432/mydb"`
 
 	SchTickInterval  time.Duration `envconfig:"SCHEDULER_TICK_INTERVAL" default:"3s"`

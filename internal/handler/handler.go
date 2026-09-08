@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"distributed-job-scheduler/internal/metrics"
 	"distributed-job-scheduler/internal/store"
 	"encoding/json"
 	"errors"
@@ -84,6 +85,8 @@ func (h *Handler) submitJob(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "Failed to submit job: "+err.Error())
 		return
 	}
+
+	metrics.JobsSubmitted.Inc()
 	writeResponse(w, http.StatusOK, createdJob)
 }
 
@@ -126,6 +129,7 @@ func (h *Handler) cancelJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	metrics.JobsCancelled.Inc()
 	writeResponse(w, http.StatusOK, "Job cancelled")
 }
 

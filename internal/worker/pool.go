@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"distributed-job-scheduler/internal/metrics"
 	"distributed-job-scheduler/internal/store"
 	"encoding/json"
 	"log/slog"
@@ -68,6 +69,9 @@ func (p *Pool) executeJob(ctx context.Context, jobId uuid.UUID) {
 		return
 	}
 
+	metrics.JobsRunning.Inc()
+	defer metrics.JobsRunning.Dec()
+
 	defer func() {
 		if r := recover(); r != nil {
 			slog.Error("recovered from panic", "err", r)
@@ -76,7 +80,13 @@ func (p *Pool) executeJob(ctx context.Context, jobId uuid.UUID) {
 
 	handler, ok := p.handlers[job.Type]
 	if !ok {
-		p.store.MarkJobFailed(ctx, jobId)
+		retried, _ := p.store.MarkJobFailed(ctx, jobId)
+		if retried {
+			metrics.JobsRetried.Inc()
+		} else {
+			metrics.JobsFailed.Inc()
+		}
+
 		slog.Error("No handler registered for type" + job.Type)
 		return
 	}
@@ -84,14 +94,26 @@ func (p *Pool) executeJob(ctx context.Context, jobId uuid.UUID) {
 	execCtx, cancel := context.WithTimeout(ctx, time.Duration(job.TimeoutMillis)*time.Millisecond)
 	defer cancel()
 
+	start := time.Now()
 	err = handler(execCtx, job.Data)
+	elapsed := time.Since(start).Seconds()
+
 	if err != nil {
 		slog.Error("Job execution failed", "err", err)
-		p.store.MarkJobFailed(ctx, jobId)
+		retried, _ := p.store.MarkJobFailed(ctx, jobId)
+		if retried {
+			metrics.JobsRetried.Inc()
+		} else {
+			metrics.JobsFailed.Inc()
+		}
+
+		metrics.ProcessingLatency.WithLabelValues(job.Type, "failure").Observe(elapsed)
 		return
 	}
 
 	p.store.MarkJobSucceeded(ctx, jobId)
+	metrics.JobsSucceeded.Inc()
+	metrics.ProcessingLatency.WithLabelValues(job.Type, "success").Observe(elapsed)
 }
 
 func (p *Pool) initHandlers() {

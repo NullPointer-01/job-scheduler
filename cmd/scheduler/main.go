@@ -12,6 +12,7 @@ import (
 
 	"distributed-job-scheduler/internal/config"
 	"distributed-job-scheduler/internal/handler"
+	"distributed-job-scheduler/internal/metrics"
 	"distributed-job-scheduler/internal/scheduler"
 	"distributed-job-scheduler/internal/store"
 	"distributed-job-scheduler/internal/worker"
@@ -23,6 +24,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func main() {
@@ -71,6 +73,7 @@ func main() {
 	}
 
 	if recovered > 0 {
+		metrics.JobsRecovered.Add(float64(recovered))
 		slog.Info("Recovered jobs", "count", recovered)
 	}
 
@@ -103,6 +106,24 @@ func main() {
 		}
 	}()
 
+	// Metrics Server
+	slog.Info("Starting Metrics server on ", "addr", conf.MetricsAddr, "port", conf.MetricsPort)
+	metricsAddr := conf.MetricsAddr + ":" + conf.MetricsPort
+	metricsMux := http.NewServeMux()
+	metricsMux.Handle("/metrics", promhttp.Handler())
+
+	metricsServer := &http.Server{
+		Addr:    metricsAddr,
+		Handler: metricsMux,
+	}
+
+	go func() {
+		err := metricsServer.ListenAndServe()
+		if err != nil && err != http.ErrServerClosed {
+			slog.Error("Failed to start metrics server", "err", err)
+		}
+	}()
+
 	<-ctx.Done()
 	slog.Info("Shutting down application")
 
@@ -110,4 +131,5 @@ func main() {
 	defer cancel()
 
 	apiServer.Shutdown(shutdownCtx)
+	metricsServer.Shutdown(shutdownCtx)
 }
