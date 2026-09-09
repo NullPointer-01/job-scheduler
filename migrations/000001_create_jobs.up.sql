@@ -12,3 +12,5 @@ CREATE TABLE Jobs (
     created_at TIMESTAMPTZ NOT NULL,
     modified_at TIMESTAMPTZ NOT NULL
 )
+
+CREATE INDEX idx_jobs_scheduled ON jobs (run_at ASC) WHERE status = 'scheduled';
