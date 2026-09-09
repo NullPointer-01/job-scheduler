@@ -44,7 +44,7 @@ func (s *PostgresStore) CreateJob(ctx context.Context, job Job) (Job, error) {
 }
 
 func (s *PostgresStore) GetPendingJobs(ctx context.Context, limit int) ([]Job, error) {
-	const q1 = "SELECT * FROM jobs WHERE status = $1 ORDER BY run_at LIMIT $2 FOR UPDATE SKIP LOCKED"
+	const q1 = "SELECT * FROM jobs WHERE status = $1 AND run_at <= $2 ORDER BY run_at LIMIT $3 FOR UPDATE SKIP LOCKED"
 	var jobs []Job
 
 	tx, err := s.db.BeginTxx(ctx, nil)
@@ -53,7 +53,8 @@ func (s *PostgresStore) GetPendingJobs(ctx context.Context, limit int) ([]Job, e
 	}
 	defer tx.Rollback()
 
-	err = tx.SelectContext(ctx, &jobs, q1, StateScheduled, limit)
+	now := time.Now().Truncate(time.Second)
+	err = tx.SelectContext(ctx, &jobs, q1, StateScheduled, now, limit)
 	if err != nil {
 		return []Job{}, err
 	}
@@ -70,7 +71,7 @@ func (s *PostgresStore) GetPendingJobs(ctx context.Context, limit int) ([]Job, e
 	q2, args, err := sqlx.In(
 		"UPDATE jobs SET status = ?, modified_at = ? WHERE id IN (?)",
 		StateRunning,
-		time.Now().Truncate(time.Second),
+		now,
 		jobIds,
 	)
 	q2 = tx.Rebind(q2)
@@ -157,7 +158,7 @@ func (s *PostgresStore) MarkJobSucceeded(ctx context.Context, id uuid.UUID) erro
 		return fmt.Errorf("failed to mark job as success: %w", err)
 	}
 
-	if n, _ := res.RowsAffected(); n > 0 {
+	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrUnknown
 	}
 
@@ -221,7 +222,7 @@ func (s *PostgresStore) RecoverCrashedJobs(ctx context.Context) (int, error) {
 
 func calculateNextRunTime(retryCount int, now time.Time) time.Time {
 	nextTime := backoffBaseTime * time.Duration(math.Pow(2, float64(retryCount-1)))
-	nextTime = max(nextTime, backoffMaxTime)
+	nextTime = min(nextTime, backoffMaxTime)
 
 	return now.Add(nextTime)
 }

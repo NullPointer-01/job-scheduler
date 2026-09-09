@@ -75,6 +75,12 @@ func (p *Pool) executeJob(ctx context.Context, jobId uuid.UUID) {
 	defer func() {
 		if r := recover(); r != nil {
 			slog.Error("recovered from panic", "err", r)
+			retried, _ := p.store.MarkJobFailed(ctx, jobId)
+			if retried {
+				metrics.JobsRetried.Inc()
+			} else {
+				metrics.JobsFailed.Inc()
+			}
 		}
 	}()
 
