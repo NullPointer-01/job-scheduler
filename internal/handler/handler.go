@@ -87,7 +87,7 @@ func (h *Handler) submitJob(w http.ResponseWriter, r *http.Request) {
 	}
 
 	metrics.JobsSubmitted.Inc()
-	writeResponse(w, http.StatusOK, createdJob)
+	writeResponse(w, http.StatusCreated, createdJob)
 }
 
 func (h *Handler) getJob(w http.ResponseWriter, r *http.Request) {

@@ -133,7 +133,7 @@ func main() {
 	<-ctx.Done()
 	slog.Info("Shutting down application")
 
-	shutdownCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	apiServer.Shutdown(shutdownCtx)

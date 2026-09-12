@@ -41,7 +41,7 @@ func (p *Pool) Run(ctx context.Context) {
 		wg.Add(1)
 
 		go func() {
-			wg.Done()
+			defer wg.Done()
 			p.runWorker(ctx)
 		}()
 	}
@@ -129,7 +129,7 @@ func (p *Pool) initHandlers() {
 		select {
 		case <-ctx.Done():
 			slog.Info("Job timed out")
-			return nil
+			return ctx.Err()
 		default:
 			slog.Info("Email successfully sent")
 			return nil
