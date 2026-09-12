@@ -41,6 +41,11 @@ var (
 		Help: "Total number of crashed jobs recovered at startup.",
 	})
 
+	JobsExpired = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "scheduler_jobs_expired_total",
+		Help: "Total number of jobs recovered after lease expiry.",
+	})
+
 	ProcessingLatency = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name: "jobs_processing_duration_seconds",
 		Help: "Job processing time by workers in seconds",

@@ -8,25 +8,27 @@ import (
 	"log/slog"
 	"sync"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 type Handler func(ctx context.Context, data json.RawMessage) error
 
 type Pool struct {
-	store    store.Store
-	queue    <-chan uuid.UUID
-	handlers map[string]Handler
-	size     int
+	poolId        string
+	store         store.Store
+	queue         <-chan store.Job
+	handlers      map[string]Handler
+	size          int
+	leaseDuration time.Duration
 }
 
-func New(store store.Store, queue <-chan uuid.UUID, size int) *Pool {
+func New(poolId string, store store.Store, queue <-chan store.Job, size int, leaseDuration time.Duration) *Pool {
 	return &Pool{
-		store:    store,
-		queue:    queue,
-		size:     size,
-		handlers: make(map[string]Handler),
+		poolId:        poolId,
+		store:         store,
+		queue:         queue,
+		size:          size,
+		leaseDuration: leaseDuration,
+		handlers:      make(map[string]Handler),
 	}
 }
 
@@ -52,20 +54,19 @@ func (p *Pool) runWorker(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case jobId, ok := <-p.queue:
+		case job, ok := <-p.queue:
 			if !ok {
 				return
 			}
 
-			p.executeJob(ctx, jobId)
+			p.executeJob(ctx, job)
 		}
 	}
 }
 
-func (p *Pool) executeJob(ctx context.Context, jobId uuid.UUID) {
-	job, err := p.store.GetJob(ctx, jobId)
-	if err != nil {
-		slog.Error("Job execution failed", "err", err)
+func (p *Pool) executeJob(ctx context.Context, job store.Job) {
+	if err := p.store.MarkJobRunning(ctx, job.Id, p.poolId, job.FencingToken, p.leaseDuration); err != nil {
+		slog.Warn("Job reclaimed or stale, aborting", "id", job.Id, "err", err)
 		return
 	}
 
@@ -75,7 +76,7 @@ func (p *Pool) executeJob(ctx context.Context, jobId uuid.UUID) {
 	defer func() {
 		if r := recover(); r != nil {
 			slog.Error("recovered from panic", "err", r)
-			retried, _ := p.store.MarkJobFailed(ctx, jobId)
+			retried, _ := p.store.MarkJobFailed(ctx, job.Id, p.poolId, job.FencingToken)
 			if retried {
 				metrics.JobsRetried.Inc()
 			} else {
@@ -86,7 +87,7 @@ func (p *Pool) executeJob(ctx context.Context, jobId uuid.UUID) {
 
 	handler, ok := p.handlers[job.Type]
 	if !ok {
-		retried, _ := p.store.MarkJobFailed(ctx, jobId)
+		retried, _ := p.store.MarkJobFailed(ctx, job.Id, p.poolId, job.FencingToken)
 		if retried {
 			metrics.JobsRetried.Inc()
 		} else {
@@ -101,12 +102,12 @@ func (p *Pool) executeJob(ctx context.Context, jobId uuid.UUID) {
 	defer cancel()
 
 	start := time.Now()
-	err = handler(execCtx, job.Data)
+	err := handler(execCtx, job.Data)
 	elapsed := time.Since(start).Seconds()
 
 	if err != nil {
 		slog.Error("Job execution failed", "err", err)
-		retried, _ := p.store.MarkJobFailed(ctx, jobId)
+		retried, _ := p.store.MarkJobFailed(ctx, job.Id, p.poolId, job.FencingToken)
 		if retried {
 			metrics.JobsRetried.Inc()
 		} else {
@@ -117,7 +118,7 @@ func (p *Pool) executeJob(ctx context.Context, jobId uuid.UUID) {
 		return
 	}
 
-	p.store.MarkJobSucceeded(ctx, jobId)
+	p.store.MarkJobSucceeded(ctx, job.Id, p.poolId, job.FencingToken)
 	metrics.JobsSucceeded.Inc()
 	metrics.ProcessingLatency.WithLabelValues(job.Type, "success").Observe(elapsed)
 }

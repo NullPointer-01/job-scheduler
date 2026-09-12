@@ -78,10 +78,16 @@ func main() {
 	}
 
 	// Scheduler and Worker pool
-	queue := make(chan uuid.UUID, conf.WkrPoolSize*2)
-	sch := scheduler.New(st, queue, conf.SchDispatchCount, conf.SchTickInterval)
+	schedulerId := conf.SchedulerId
+	if schedulerId == "" {
+		schedulerId = uuid.NewString()
+	}
 
-	workerPool := worker.New(st, queue, conf.WkrPoolSize)
+	queue := make(chan store.Job, conf.WkrPoolSize*2)
+	sch := scheduler.New(schedulerId, st, queue, conf.SchDispatchCount, conf.SchTickInterval, conf.SchLeaseDuration, conf.SchLeaseRecoveryTick)
+
+	poolId := schedulerId // Same as scheduler Id
+	workerPool := worker.New(poolId, st, queue, conf.WkrPoolSize, conf.SchLeaseDuration)
 
 	go sch.Run(ctx)
 	go workerPool.Run(ctx)
