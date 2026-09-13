@@ -10,9 +10,9 @@ A lightweight **distributed job scheduler built with Go and PostgreSQL**. It pro
 * Per-job execution timeouts
 * PostgreSQL persistence
 * Crash recovery for running jobs
+* Lease-based job ownership and expiry
+* Support for multiple scheduler instances and worker pools
 * Prometheus metrics
-* Extensible job handlers
-* Graceful shutdown
 
 ## Architecture
 
@@ -20,13 +20,40 @@ A lightweight **distributed job scheduler built with Go and PostgreSQL**. It pro
 HTTP API
    │
    ▼
-PostgreSQL ◄── Scheduler
-                  │
-                  ▼
-             Worker Pool
-                  │
-                  ▼
-             Job Handlers
+PostgreSQL ◄──── Scheduler 1 ────► Worker Pool 1
+   ▲                    │
+   │                    ▼
+   │               Job Handlers
+   │
+   └──────────── Scheduler 2 ────► Worker Pool 2
+                        │
+                        ▼
+                   Job Handlers
+```
+
+Multiple scheduler instances can run concurrently, each with its own worker pool. PostgreSQL acts as the shared persistent state store.
+
+Schedulers use **leases** to establish ownership of jobs. A lease has an expiry time, allowing ownership to be recovered when a scheduler or worker fails before completing the job.
+
+```text
+Job
+ │
+ ▼
+Lease acquired
+ │
+ ├── Scheduler/worker succeeds
+ │       └──► Lease released
+ │
+ └── Scheduler/worker fails
+         │
+         ▼
+      Lease expires
+         │
+         ▼
+   Job becomes recoverable
+         │
+         ▼
+ Another scheduler can acquire the lease
 ```
 
 ## Tech Stack
@@ -67,7 +94,6 @@ scheduled → running → success
                  └──→ failed → retry
                  └──→ cancelled
 ```
-
 
 ## Project Structure
 
